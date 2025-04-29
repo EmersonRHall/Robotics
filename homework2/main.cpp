@@ -11,43 +11,22 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
                                0, 707.0493, 180.5066,
                                0, 0, 1);
 
-// Cumulative Point Cloud
-vector<Point2f> all_cloud_points;
+// Cumulative Robot Positions
+vector<Point2f> all_positions;
 
 // Helper: Draw trajectory
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED line
-    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // RED point
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // Red thick line
+    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // Red circle
 }
 
-// Helper: Accumulate point cloud
-void accumulatePointCloud(const Mat& pts4D)
+// Helper: Draw accumulated robot path (point cloud)
+void drawAllPositions(Mat &traj)
 {
-    for (int c = 0; c < pts4D.cols; c++)
+    for (const auto& p : all_positions)
     {
-        Mat x = pts4D.col(c);
-        x /= x.at<float>(3);
-
-        float x_world = x.at<float>(0);
-        float z_world = x.at<float>(2);
-
-        int x_proj = int(x_world * 1.5) + 600;
-        int y_proj = int(z_world * 1.5) + 280;
-
-        if (x_proj > 0 && x_proj < 1200 && y_proj > 0 && y_proj < 300)
-        {
-            all_cloud_points.push_back(Point2f(x_proj, y_proj));
-        }
-    }
-}
-
-// Helper: Draw all point cloud
-void drawAllCloudPoints(Mat &traj)
-{
-    for (const auto& p : all_cloud_points)
-    {
-        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue dots
+        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue small dots
     }
 }
 
@@ -56,7 +35,7 @@ int main()
     string folder = "first_200_right/";
     int num_images = 200;
 
-    Ptr<ORB> orb = ORB::create(5000); // More ORB features
+    Ptr<ORB> orb = ORB::create(5000);
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
@@ -64,7 +43,7 @@ int main()
     int traj_height = 300;
     int full_height = height + traj_height;
 
-    Mat traj = Mat::zeros(traj_height, width, CV_8UC3);
+    Mat traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
@@ -109,7 +88,7 @@ int main()
             pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Draw green points
+        // Draw green points on top
         for (const auto& p : pts1)
         {
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
@@ -125,35 +104,28 @@ int main()
         t.copyTo(Rt(Range(0,3), Range(3,4)));
         pose = pose * Rt.inv();
 
-        // Compute current point (X normal, Z flipped)
+        // Current robot position (X scaled, Z flipped and scaled)
         Point2d current_point(
             pose.at<double>(0,3) * 1.5 + 600,
            -pose.at<double>(2,3) * 1.5 + 280
         );
 
-        // Triangulate
-        Mat proj1 = K * Mat::eye(3,4,CV_64F);
-        Mat proj2 = K * Rt(Range(0,3), Range::all());
-        Mat pts4D;
-        triangulatePoints(proj1, proj2, pts1, pts2, pts4D);
+        // Accumulate current position as cloud
+        all_positions.push_back(current_point);
 
-        accumulatePointCloud(pts4D);
+        // === Draw bottom panel ===
+        drawAllPositions(traj_frame);               // Light blue path
+        drawTrajectory(traj_frame, current_point, last_point); // Red line on top
 
-        // Draw bottom panel
-        Mat traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawAllCloudPoints(traj_frame); // Draw point cloud first
-        drawTrajectory(traj_frame, current_point, last_point); // Then red line on top
-
-        traj = traj_frame.clone();
         last_point = current_point;
 
         // Top image
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 
-        // Combine
+        // Combine top + bottom
         Mat full_frame;
-        vconcat(img1_resized, traj, full_frame);
+        vconcat(img1_resized, traj_frame, full_frame);
 
         output_video.write(full_frame);
     }

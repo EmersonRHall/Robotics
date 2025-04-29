@@ -12,22 +12,23 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
                                0, 0, 1);
 
 // Cumulative Robot Positions
-vector<Point2f> all_positions;
+vector<Point> all_positions;
 
-// Helper: Draw trajectory
-void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
+// Helper: Draw full light blue path
+void drawFullPath(Mat &traj)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // Red thick line
-    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // Red circle
+    if (all_positions.size() < 2) return;
+    for (size_t i = 1; i < all_positions.size(); i++)
+    {
+        line(traj, all_positions[i-1], all_positions[i], Scalar(255, 255, 200), 6); // Thick light blue
+    }
 }
 
-// Helper: Draw accumulated robot path (point cloud)
-void drawAllPositions(Mat &traj)
+// Helper: Draw current red trajectory
+void drawTrajectory(Mat &traj, Point current_pos, Point last_pos)
 {
-    for (const auto& p : all_positions)
-    {
-        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue small dots
-    }
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // Thin red line
+    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // Red point
 }
 
 int main()
@@ -47,7 +48,9 @@ int main()
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
-    Point2d last_point(600, 280);
+    Point last_point(600, 280);
+
+    all_positions.push_back(last_point); // Start path
 
     for (int i = 0; i < num_images-1; i++)
     {
@@ -79,7 +82,7 @@ int main()
         matcher.match(desc1, desc2, matches);
 
         sort(matches.begin(), matches.end());
-        matches.resize(500); // More matches
+        matches.resize(500);
 
         vector<Point2f> pts1, pts2;
         for (auto &m : matches)
@@ -88,7 +91,7 @@ int main()
             pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Draw green points on top
+        // Draw lots of green points
         for (const auto& p : pts1)
         {
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
@@ -105,25 +108,24 @@ int main()
         pose = pose * Rt.inv();
 
         // Current robot position (X scaled, Z flipped and scaled)
-        Point2d current_point(
-            pose.at<double>(0,3) * 1.5 + 600,
-           -pose.at<double>(2,3) * 1.5 + 280
+        Point current_point(
+            int(pose.at<double>(0,3) * 1.5 + 600),
+            int(-pose.at<double>(2,3) * 1.5 + 280)
         );
 
-        // Accumulate current position as cloud
-        all_positions.push_back(current_point);
+        all_positions.push_back(current_point); // Save for full path
 
-        // === Draw bottom panel ===
-        drawAllPositions(traj_frame);               // Light blue path
+        // Draw
+        drawFullPath(traj_frame);               // Big static light blue
         drawTrajectory(traj_frame, current_point, last_point); // Red line on top
 
         last_point = current_point;
 
-        // Top image
+        // Resize top
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 
-        // Combine top + bottom
+        // Combine
         Mat full_frame;
         vconcat(img1_resized, traj_frame, full_frame);
 
@@ -132,6 +134,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL video saved: output_combined.avi" << endl;
+    cout << "✅ FINAL corrected video saved: output_combined.avi" << endl;
     return 0;
 }

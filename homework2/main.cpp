@@ -106,10 +106,13 @@ int main()
         t.copyTo(Rt(Rect(3,0,1,3)));
         pose = pose * Rt.inv();
 
-        // Current robot position
+        // Get current robot position
+        double Tx = pose.at<double>(0,3);
+        double Tz = pose.at<double>(2,3);
+
         Point current_point(
-            int(pose.at<double>(0,3) * 4.0 + 600),   // X scaling (wider, balanced)
-            int(-pose.at<double>(2,3) * 2.0 + 280)   // Z scaling (compressed a little)
+            int(Tx * 4.0 + 600),   // Robot X (screen mapping)
+            int(-Tz * 2.0 + 280)   // Robot Z (screen mapping)
         );
         trajectory_points.push_back(current_point);
 
@@ -120,7 +123,7 @@ int main()
         Mat pts4D;
         triangulatePoints(P1, P2, pts1, pts2, pts4D);
 
-        // Accumulate good point cloud
+        // Add moving point cloud
         for (int c = 0; c < pts4D.cols; c++)
         {
             Mat x = pts4D.col(c);
@@ -129,10 +132,13 @@ int main()
             float X = x.at<float>(0);
             float Z = x.at<float>(2);
 
-            if (fabs(X) < 50 && Z > 0 && Z < 50) // Wider natural cloud
+            if (fabs(X) < 50 && Z > 0 && Z < 50)
             {
-                int u = int(X * 4.0 + 600);   // 4.0x X scaling
-                int v = int(-Z * 2.0 + 280);  // 2.0x Z scaling
+                float X_moving = X + Tx; // Shift by robot position
+                float Z_moving = Z + Tz; // Shift by robot position
+
+                int u = int(X_moving * 4.0 + 600);
+                int v = int(-Z_moving * 2.0 + 280);
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -141,7 +147,7 @@ int main()
 
         // === Draw bottom panel ===
         traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawPointCloud(traj_frame);  // Light blue cloud
+        drawPointCloud(traj_frame);  // Moving light blue cloud
         for (size_t j = 1; j < trajectory_points.size(); j++)
         {
             drawTrajectory(traj_frame, trajectory_points[j], trajectory_points[j-1]); // Dark blue trajectory
@@ -163,6 +169,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL correct output_combined.avi saved!" << endl;
+    cout << "✅ FINAL MOVING CLOUD output_combined.avi saved!" << endl;
     return 0;
 }

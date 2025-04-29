@@ -47,7 +47,8 @@ int main()
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
-    Point last_point(600, 280);
+    Point last_point(600, 250); // Start higher (shifted up)
+
     trajectory_points.push_back(last_point);
 
     for (int i = 0; i < num_images-1; i++)
@@ -111,8 +112,8 @@ int main()
         double Tz = pose.at<double>(2,3);
 
         Point current_point(
-            int(Tx * 2.5 + 600),   // Robot X (scaled smaller)
-            int(-Tz * 1.2 + 280)   // Robot Z (scaled smaller)
+            int(Tx * 2.5 + 600),
+            int(-Tz * 1.2 + 250)   // SHIFT UP (was 280)
         );
         trajectory_points.push_back(current_point);
 
@@ -137,8 +138,8 @@ int main()
                 float X_moving = X + Tx; // Shift by robot position
                 float Z_moving = Z + Tz; // Shift by robot position
 
-                int u = int(X_moving * 2.5 + 600);   // Smaller X scaling
-                int v = int(-Z_moving * 1.2 + 280);  // Smaller Z scaling
+                int u = int(X_moving * 2.5 + 600);
+                int v = int(-Z_moving * 1.2 + 250);  // SHIFT UP (was 280)
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -169,6 +170,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL SMALLER MOVING output_combined.avi saved!" << endl;
+    cout << "✅ FINAL FINAL FINAL output_combined.avi saved!" << endl;
     return 0;
 }

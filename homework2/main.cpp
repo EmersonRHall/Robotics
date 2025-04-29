@@ -113,7 +113,7 @@ int main()
 
         Point current_point(
             int(Tx * 2.5 + 600),
-            int(-Tz * 1.2 + 250)   // SHIFT UP (was 280)
+            int(-Tz * 1.2 + 200)   // SHIFT UP (was 280)
         );
         trajectory_points.push_back(current_point);
 

@@ -111,8 +111,8 @@ int main()
         double Tz = pose.at<double>(2,3);
 
         Point current_point(
-            int(Tx * 4.0 + 600),   // Robot X (screen mapping)
-            int(-Tz * 2.0 + 280)   // Robot Z (screen mapping)
+            int(Tx * 2.5 + 600),   // Robot X (scaled smaller)
+            int(-Tz * 1.2 + 280)   // Robot Z (scaled smaller)
         );
         trajectory_points.push_back(current_point);
 
@@ -137,8 +137,8 @@ int main()
                 float X_moving = X + Tx; // Shift by robot position
                 float Z_moving = Z + Tz; // Shift by robot position
 
-                int u = int(X_moving * 4.0 + 600);
-                int v = int(-Z_moving * 2.0 + 280);
+                int u = int(X_moving * 2.5 + 600);   // Smaller X scaling
+                int v = int(-Z_moving * 1.2 + 280);  // Smaller Z scaling
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -147,7 +147,7 @@ int main()
 
         // === Draw bottom panel ===
         traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawPointCloud(traj_frame);  // Moving light blue cloud
+        drawPointCloud(traj_frame);  // Moving smaller light blue cloud
         for (size_t j = 1; j < trajectory_points.size(); j++)
         {
             drawTrajectory(traj_frame, trajectory_points[j], trajectory_points[j-1]); // Dark blue trajectory
@@ -169,6 +169,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL MOVING CLOUD output_combined.avi saved!" << endl;
+    cout << "✅ FINAL SMALLER MOVING output_combined.avi saved!" << endl;
     return 0;
 }

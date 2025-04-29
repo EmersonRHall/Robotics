@@ -18,7 +18,7 @@ vector<Point2f> all_cloud_points;
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
     line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED thicker line
-    circle(traj, current_pos, 3, Scalar(255, 255, 200), -1);  // light blue point
+    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // RED circle at point
 }
 
 // Helper: Store point cloud
@@ -42,12 +42,12 @@ void accumulatePointCloud(const Mat& pts4D)
     }
 }
 
-// Helper: Draw all accumulated cloud points
+// Helper: Draw all accumulated point cloud
 void drawAllCloudPoints(Mat &traj)
 {
     for (const auto& p : all_cloud_points)
     {
-        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Bigger light blue dots
+        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue point cloud
     }
 }
 
@@ -56,7 +56,7 @@ int main()
     string folder = "first_200_right/";
     int num_images = 200;
 
-    Ptr<ORB> orb = ORB::create(3000); // More features
+    Ptr<ORB> orb = ORB::create(5000); // More ORB features
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
@@ -100,7 +100,7 @@ int main()
         matcher.match(desc1, desc2, matches);
 
         sort(matches.begin(), matches.end());
-        matches.resize(500); // MORE matches (more point cloud)
+        matches.resize(500); // more point cloud matches
 
         vector<Point2f> pts1, pts2;
         for (auto &m : matches)
@@ -109,7 +109,7 @@ int main()
             pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Draw green points
+        // Draw more green points
         for (const auto& p : pts1)
         {
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
@@ -130,8 +130,6 @@ int main()
             pose.at<double>(0,3) * 3.0 + 600,
             pose.at<double>(2,3) * 3.0 + 250
         );
-        drawTrajectory(traj, current_point, last_point);
-        last_point = current_point;
 
         // Triangulate
         Mat proj1 = K * Mat::eye(3,4,CV_64F);
@@ -141,12 +139,13 @@ int main()
 
         accumulatePointCloud(pts4D);
 
-        // Redraw bottom
+        // --- Draw bottom panel ---
         Mat traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawAllCloudPoints(traj_frame);
-        drawTrajectory(traj_frame, current_point, last_point);
+        drawAllCloudPoints(traj_frame);        // First: draw point cloud
+        drawTrajectory(traj_frame, current_point, last_point); // Then: draw red trajectory on top
 
         traj = traj_frame.clone();
+        last_point = current_point;
 
         // Top image
         Mat img1_resized;
@@ -161,7 +160,7 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL Corrected Video Saved: output_combined.avi" << endl;
+    cout << "✅ FINAL Video Saved: output_combined.avi" << endl;
     return 0;
 }
 

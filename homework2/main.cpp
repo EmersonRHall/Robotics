@@ -26,7 +26,7 @@ void drawPointCloud(Mat &traj)
 {
     for (auto &p : cloud_points)
     {
-        circle(traj, p, 3, Scalar(255, 255, 200), -1);  // Bigger light blue points
+        circle(traj, p, 2, Scalar(255, 255, 200), -1);  // Medium light blue points
     }
 }
 
@@ -108,8 +108,8 @@ int main()
 
         // Current robot position
         Point current_point(
-            int(pose.at<double>(0,3) * 50.0 + 600),   // X scaling 50x (stronger)
-            int(-pose.at<double>(2,3) * 15.0 + 280)   // Z scaling 15x
+            int(pose.at<double>(0,3) * 4.0 + 600),   // X scaling (wider, balanced)
+            int(-pose.at<double>(2,3) * 2.0 + 280)   // Z scaling (compressed a little)
         );
         trajectory_points.push_back(current_point);
 
@@ -120,7 +120,7 @@ int main()
         Mat pts4D;
         triangulatePoints(P1, P2, pts1, pts2, pts4D);
 
-        // Accumulate clean point cloud (only close points)
+        // Accumulate good point cloud
         for (int c = 0; c < pts4D.cols; c++)
         {
             Mat x = pts4D.col(c);
@@ -129,10 +129,10 @@ int main()
             float X = x.at<float>(0);
             float Z = x.at<float>(2);
 
-            if (fabs(X) < 15 && Z > 5 && Z < 30) // Only points close to robot
+            if (fabs(X) < 50 && Z > 0 && Z < 50) // Wider natural cloud
             {
-                int u = int(X * 50.0 + 600);   // 50x X scaling
-                int v = int(-Z * 15.0 + 280);  // 15x Z scaling
+                int u = int(X * 4.0 + 600);   // 4.0x X scaling
+                int v = int(-Z * 2.0 + 280);  // 2.0x Z scaling
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -163,6 +163,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL trajectory-hugging output_combined.avi saved!" << endl;
+    cout << "✅ FINAL correct output_combined.avi saved!" << endl;
     return 0;
 }

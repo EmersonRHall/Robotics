@@ -109,7 +109,7 @@ int main()
         // Current robot position
         Point current_point(
             int(pose.at<double>(0,3) * 4.0 + 600),   // X scaling
-            int(-pose.at<double>(2,3) * 2.0 + 280)   // Z scaling
+            int(-pose.at<double>(2,3) * 1.5 + 280)   // Z scaling FIXED
         );
         trajectory_points.push_back(current_point);
 
@@ -131,8 +131,8 @@ int main()
 
             if (fabs(X) < 100 && fabs(Z) < 100 && Z > 0)
             {
-                int u = int(X * 4.0 + 600);   // Tighter X
-                int v = int(-Z * 2.0 + 280);  // Tighter Z
+                int u = int(X * 4.0 + 600);   // X tighter
+                int v = int(-Z * 1.5 + 280);  // Z TALLER (FIXED)
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -163,6 +163,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL output_combined.avi saved and ready!" << endl;
+    cout << "✅ FINAL FINAL video saved: output_combined.avi" << endl;
     return 0;
 }

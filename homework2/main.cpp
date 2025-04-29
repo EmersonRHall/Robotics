@@ -1,96 +1,137 @@
-#include <opencv2/opencv.hpp>
-#include <opencv2/features2d.hpp>
 #include <iostream>
+#include <opencv2/opencv.hpp>
 #include <vector>
 #include <string>
 #include <filesystem>
 
 namespace fs = std::filesystem;
 
-// === Load Intrinsics ===
-cv::Mat getK() {
-    return (cv::Mat_<double>(3, 3) << 
-        718.856, 0.0, 607.1928,
-        0.0, 718.856, 185.2157,
-        0.0, 0.0, 1.0);
-}
+using namespace std;
+using namespace cv;
 
-// === Load image paths ===
-std::vector<std::string> loadImagePaths(const std::string& folder) {
-    std::vector<std::string> paths;
-    for (const auto& entry : fs::directory_iterator(folder)) {
-        paths.push_back(entry.path().string());
-    }
-    std::sort(paths.begin(), paths.end());
-    return paths;
-}
-
-// === Detect and Track Features ===
-void detectAndTrack(const cv::Mat& prev, const cv::Mat& next, 
-                    std::vector<cv::Point2f>& prevPts, 
-                    std::vector<cv::Point2f>& nextPts) {
-    std::vector<cv::KeyPoint> keypoints;
-    cv::Ptr<cv::ORB> detector = cv::ORB::create(2000);
-    detector->detect(prev, keypoints);
-    cv::KeyPoint::convert(keypoints, prevPts);
-
-    std::vector<uchar> status;
-    std::vector<float> err;
-    cv::calcOpticalFlowPyrLK(prev, next, prevPts, nextPts, status, err);
-
-    std::vector<cv::Point2f> filteredPrev, filteredNext;
-    for (size_t i = 0; i < status.size(); ++i) {
-        if (status[i]) {
-            filteredPrev.push_back(prevPts[i]);
-            filteredNext.push_back(nextPts[i]);
-        }
-    }
-    prevPts = filteredPrev;
-    nextPts = filteredNext;
-}
+// === Intrinsic Camera Matrix ===
+Mat K = (Mat_<double>(3, 3) << 707.0493, 0, 604.0814,
+                                0, 707.0493, 180.5066,
+                                0, 0, 1);
 
 int main() {
-    std::string img_folder = "kitti_seq/00/image_0";
-    std::vector<std::string> images = loadImagePaths(img_folder);
-    cv::Mat K = getK();
+    string folder_path = "first_200_right/";
+    vector<string> image_files;
 
-    // Camera path accumulation
-    std::vector<cv::Point2f> trajectory;
-    cv::Mat R_f = cv::Mat::eye(3, 3, CV_64F);
-    cv::Mat t_f = cv::Mat::zeros(3, 1, CV_64F);
+    // Load image filenames
+    for (const auto& entry : fs::directory_iterator(folder_path)) {
+        image_files.push_back(entry.path().string());
+    }
+    sort(image_files.begin(), image_files.end());
 
-    for (size_t i = 0; i < images.size() - 1; ++i) {
-        cv::Mat img1 = cv::imread(images[i], cv::IMREAD_GRAYSCALE);
-        cv::Mat img2 = cv::imread(images[i + 1], cv::IMREAD_GRAYSCALE);
+    // Trajectory plot
+    int traj_size = 600;
+    Mat traj = Mat::zeros(traj_size, traj_size, CV_8UC3);
 
-        if (img1.empty() || img2.empty()) break;
+    // Initialize camera pose
+    Mat R_f = Mat::eye(3, 3, CV_64F);
+    Mat t_f = Mat::zeros(3, 1, CV_64F);
 
-        std::vector<cv::Point2f> pts1, pts2;
-        detectAndTrack(img1, img2, pts1, pts2);
+    // Video writers
+    VideoWriter traj_video("output_trajectory.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, Size(traj_size, traj_size));
+    VideoWriter pointcloud_video("output_pointcloud.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, Size(800, 800));
 
-        // Compute Essential matrix
-        cv::Mat E = cv::findEssentialMat(pts1, pts2, K, cv::RANSAC);
-        cv::Mat R, t;
-        cv::recoverPose(E, pts1, pts2, K, R, t);
+    Ptr<ORB> orb = ORB::create();
 
-        // Update pose
+    for (size_t i = 0; i < image_files.size() - 1; i++) {
+        Mat img1 = imread(image_files[i], IMREAD_GRAYSCALE);
+        Mat img2 = imread(image_files[i+1], IMREAD_GRAYSCALE);
+
+        if (img1.empty() || img2.empty()) {
+            cout << "Error loading images!" << endl;
+            continue;
+        }
+
+        vector<KeyPoint> keypoints1, keypoints2;
+        Mat descriptors1, descriptors2;
+
+        // Detect ORB features
+        orb->detectAndCompute(img1, noArray(), keypoints1, descriptors1);
+        orb->detectAndCompute(img2, noArray(), keypoints2, descriptors2);
+
+        // Match features
+        BFMatcher matcher(NORM_HAMMING);
+        vector<DMatch> matches;
+        matcher.match(descriptors1, descriptors2, matches);
+
+        // Filter good matches
+        double max_dist = 0; double min_dist = 100;
+        for (int k = 0; k < descriptors1.rows; k++) {
+            double dist = matches[k].distance;
+            if (dist < min_dist) min_dist = dist;
+            if (dist > max_dist) max_dist = dist;
+        }
+        vector<DMatch> good_matches;
+        for (int k = 0; k < descriptors1.rows; k++) {
+            if (matches[k].distance <= max(2*min_dist, 30.0)) {
+                good_matches.push_back(matches[k]);
+            }
+        }
+
+        // Extract matched points
+        vector<Point2f> pts1, pts2;
+        for (size_t j = 0; j < good_matches.size(); j++) {
+            pts1.push_back(keypoints1[good_matches[j].queryIdx].pt);
+            pts2.push_back(keypoints2[good_matches[j].trainIdx].pt);
+        }
+
+        // Fundamental matrix
+        Mat F = findFundamentalMat(pts1, pts2, FM_RANSAC);
+
+        // Essential matrix
+        Mat E = K.t() * F * K;
+
+        // Recover Pose
+        Mat R, t, mask;
+        recoverPose(E, pts1, pts2, K, R, t, mask);
+
+        // Update current pose
         t_f = t_f + (R_f * t);
         R_f = R * R_f;
 
-        trajectory.emplace_back(t_f.at<double>(0), t_f.at<double>(2));
+        int x = int(t_f.at<double>(0)) + traj_size/2;
+        int y = int(t_f.at<double>(2)) + traj_size/2;
 
-        // Plot trajectory
-        cv::Mat traj = cv::Mat::zeros(600, 600, CV_8UC3);
-        for (const auto& pt : trajectory) {
-            int x = int(pt.x) + 300;
-            int y = int(pt.y) + 100;
-            cv::circle(traj, cv::Point(x, y), 1, cv::Scalar(0, 255, 0), 2);
+        circle(traj, Point(x, y), 1, Scalar(0, 0, 255), 2);
+
+        // Show and save frame
+        traj_video.write(traj);
+        imshow("Trajectory", traj);
+        waitKey(1);
+
+        // Triangulate points
+        Mat P1 = K * Mat::eye(3, 4, CV_64F);
+        Mat Rt;
+        hconcat(R, t, Rt);
+        Mat P2 = K * Rt;
+
+        Mat pts_4d;
+        triangulatePoints(P1, P2, pts1, pts2, pts_4d);
+
+        // Draw 3D points
+        Mat cloud = Mat::zeros(800, 800, CV_8UC3);
+        for (int k = 0; k < pts_4d.cols; k++) {
+            Point3f pt;
+            pt.x = pts_4d.at<float>(0,k) / pts_4d.at<float>(3,k);
+            pt.y = pts_4d.at<float>(1,k) / pts_4d.at<float>(3,k);
+            pt.z = pts_4d.at<float>(2,k) / pts_4d.at<float>(3,k);
+
+            int u = int(pt.x * 10) + 400;
+            int v = int(pt.y * 10) + 400;
+            if (u >= 0 && u < 800 && v >= 0 && v < 800)
+                circle(cloud, Point(u,v), 1, Scalar(255, 255, 255), 1);
         }
-        cv::imshow("Trajectory", traj);
-        cv::waitKey(1);
+        pointcloud_video.write(cloud);
     }
 
-    std::cout << "Visual Odometry Finished." << std::endl;
-    cv::waitKey(0);
+    traj_video.release();
+    pointcloud_video.release();
+    cout << "Done! Videos saved." << endl;
+
     return 0;
 }

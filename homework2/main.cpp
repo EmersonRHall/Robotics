@@ -14,7 +14,7 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
 // Helper: Draw trajectory
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(255, 0, 0), 1); // thin dark blue current line
+    line(traj, last_pos, current_pos, Scalar(255, 0, 0), 1); // thin dark blue current move
     circle(traj, current_pos, 2, Scalar(200, 200, 255), -1); // light blue static points
 }
 
@@ -27,7 +27,7 @@ int main()
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
-    int height = 370; // resized color image height
+    int height = 370; // resized image height
     int traj_height = 300;
     int full_height = height + traj_height;
 
@@ -35,7 +35,7 @@ int main()
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
-    Point2d last_point(600, 150); // center starting point in traj canvas
+    Point2d last_point(600, 150); // center start point in trajectory
 
     for (int i = 0; i < num_images-1; i++)
     {
@@ -81,7 +81,7 @@ int main()
         // Draw green points on img1
         for (const auto& p : pts1)
         {
-            circle(img1_color, p, 2, Scalar(0, 255, 0), -1); // green small circles
+            circle(img1_color, p, 2, Scalar(0, 255, 0), -1); // green dots
         }
 
         // Estimate Essential matrix
@@ -95,25 +95,25 @@ int main()
         t.copyTo(Rt(Range(0,3), Range(3,4)));
         pose = pose * Rt.inv();
 
-        // Update trajectory
-        Point2d current_point(pose.at<double>(0,3)*5 + 600, pose.at<double>(2,3)*5 + 150);
+        // FIX: Flip Z to invert downward movement in plot
+        Point2d current_point(pose.at<double>(0,3)*5 + 600, -pose.at<double>(2,3)*5 + 150);
         drawTrajectory(traj, current_point, last_point);
         last_point = current_point;
 
-        // Resize img1_color to fit top half
+        // Resize img1_color for the top half
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 
-        // Combine top (image) and bottom (traj)
+        // Combine top image + bottom trajectory
         Mat full_frame;
         vconcat(img1_resized, traj, full_frame);
 
-        // Write to video
+        // Save to video
         output_video.write(full_frame);
     }
 
     output_video.release();
 
-    cout << "Done! Combined video saved: output_combined.avi" << endl;
+    cout << "Done! Corrected combined video saved: output_combined.avi" << endl;
     return 0;
 }

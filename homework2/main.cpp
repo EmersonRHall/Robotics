@@ -11,24 +11,24 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
                                0, 707.0493, 180.5066,
                                0, 0, 1);
 
-// Cumulative Robot Positions
+// Robot cumulative path
 vector<Point> all_positions;
 
-// Helper: Draw full light blue path
+// Draw full big light blue path
 void drawFullPath(Mat &traj)
 {
     if (all_positions.size() < 2) return;
     for (size_t i = 1; i < all_positions.size(); i++)
     {
-        line(traj, all_positions[i-1], all_positions[i], Scalar(255, 255, 200), 6); // Thick light blue
+        line(traj, all_positions[i-1], all_positions[i], Scalar(255, 255, 200), 16); // SUPER thick light blue
     }
 }
 
-// Helper: Draw current red trajectory
+// Draw moving red trajectory
 void drawTrajectory(Mat &traj, Point current_pos, Point last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // Thin red line
-    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // Red point
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // thin red
+    circle(traj, current_pos, 4, Scalar(0, 0, 255), -1);     // red point
 }
 
 int main()
@@ -36,7 +36,7 @@ int main()
     string folder = "first_200_right/";
     int num_images = 200;
 
-    Ptr<ORB> orb = ORB::create(5000);
+    Ptr<ORB> orb = ORB::create(5000); // More features
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
@@ -91,7 +91,7 @@ int main()
             pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Draw lots of green points
+        // Draw green dots
         for (const auto& p : pts1)
         {
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
@@ -107,17 +107,17 @@ int main()
         t.copyTo(Rt(Range(0,3), Range(3,4)));
         pose = pose * Rt.inv();
 
-        // Current robot position (X scaled, Z flipped and scaled)
+        // Current robot position (scaled)
         Point current_point(
             int(pose.at<double>(0,3) * 1.5 + 600),
             int(-pose.at<double>(2,3) * 1.5 + 280)
         );
 
-        all_positions.push_back(current_point); // Save for full path
+        all_positions.push_back(current_point); // Save
 
         // Draw
-        drawFullPath(traj_frame);               // Big static light blue
-        drawTrajectory(traj_frame, current_point, last_point); // Red line on top
+        drawFullPath(traj_frame);              // Big thick light blue
+        drawTrajectory(traj_frame, current_point, last_point); // Thin red line
 
         last_point = current_point;
 
@@ -134,6 +134,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL corrected video saved: output_combined.avi" << endl;
+    cout << "✅ FINAL BIG light blue + red trajectory video saved: output_combined.avi" << endl;
     return 0;
 }

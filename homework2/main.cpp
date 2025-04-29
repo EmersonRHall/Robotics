@@ -10,22 +10,23 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
                                0, 707.0493, 180.5066,
                                0, 0, 1);
 
+// Trajectory and Point Cloud
 vector<Point> trajectory_points;
 vector<Point> cloud_points;
 
-// Draw trajectory
+// Draw robot trajectory (dark blue line)
 void drawTrajectory(Mat &traj, Point current_pos, Point last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // Red thin line
-    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // Red dot
+    line(traj, last_pos, current_pos, Scalar(255, 0, 0), 2);  // Dark blue line
+    circle(traj, current_pos, 3, Scalar(255, 0, 0), -1);       // Dark blue dot
 }
 
-// Draw point cloud
+// Draw dense light blue point cloud
 void drawPointCloud(Mat &traj)
 {
     for (auto &p : cloud_points)
     {
-        circle(traj, p, 1, Scalar(255, 255, 200), -1); // Light blue small dots
+        circle(traj, p, 3, Scalar(255, 255, 200), -1);  // Bigger light blue points
     }
 }
 
@@ -34,7 +35,7 @@ int main()
     string folder = "first_200_right/";
     int num_images = 200;
 
-    Ptr<ORB> orb = ORB::create(5000);
+    Ptr<ORB> orb = ORB::create(5000);  // More features
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
@@ -75,7 +76,7 @@ int main()
         orb->detectAndCompute(img1_gray, noArray(), kp1, desc1);
         orb->detectAndCompute(img2_gray, noArray(), kp2, desc2);
 
-        // Match descriptors
+        // Match features
         vector<DMatch> matches;
         matcher.match(desc1, desc2, matches);
 
@@ -107,8 +108,8 @@ int main()
 
         // Current robot position
         Point current_point(
-            int(pose.at<double>(0,3) * 5.0 + 600),   // BIGGER X
-            int(-pose.at<double>(2,3) * 2.0 + 280)   // COMPRESSED Z
+            int(pose.at<double>(0,3) * 4.0 + 600),   // X scaling
+            int(-pose.at<double>(2,3) * 2.0 + 280)   // Z scaling
         );
         trajectory_points.push_back(current_point);
 
@@ -126,13 +127,12 @@ int main()
             x /= x.at<float>(3);
 
             float X = x.at<float>(0);
-            float Y = x.at<float>(1);
             float Z = x.at<float>(2);
 
-            if (fabs(X) < 100 && fabs(Z) < 100 && Z > 0) // Good points only
+            if (fabs(X) < 100 && fabs(Z) < 100 && Z > 0)
             {
-                int u = int(X * 5.0 + 600);   // X scaled wider
-                int v = int(-Z * 2.0 + 280);  // Z scaled compressed
+                int u = int(X * 4.0 + 600);   // Tighter X
+                int v = int(-Z * 2.0 + 280);  // Tighter Z
 
                 if (u > 0 && u < width && v > 0 && v < traj_height)
                     cloud_points.push_back(Point(u,v));
@@ -141,10 +141,10 @@ int main()
 
         // === Draw bottom panel ===
         traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawPointCloud(traj_frame);  // Light blue cloud
+        drawPointCloud(traj_frame);  // Big light blue cloud
         for (size_t j = 1; j < trajectory_points.size(); j++)
         {
-            drawTrajectory(traj_frame, trajectory_points[j], trajectory_points[j-1]); // Red trajectory
+            drawTrajectory(traj_frame, trajectory_points[j], trajectory_points[j-1]); // Dark blue trajectory
         }
 
         // Resize top image
@@ -163,6 +163,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL output_combined.avi saved!" << endl;
+    cout << "✅ FINAL output_combined.avi saved and ready!" << endl;
     return 0;
 }

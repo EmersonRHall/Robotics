@@ -17,8 +17,8 @@ vector<Point2f> all_cloud_points;
 // Helper: Draw trajectory line and points
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(255, 0, 0), 1); // dark blue thin line
-    circle(traj, current_pos, 2, Scalar(255, 255, 200), -1); // light blue static points
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED thicker line
+    circle(traj, current_pos, 3, Scalar(255, 255, 200), -1);  // light blue point
 }
 
 // Helper: Store point cloud
@@ -32,8 +32,8 @@ void accumulatePointCloud(const Mat& pts4D)
         float x_world = x.at<float>(0);
         float z_world = x.at<float>(2);
 
-        int x_proj = int(x_world * 3.0) + 600; // X scaled smaller
-        int y_proj = int(z_world * 3.0) + 250; // Y scaled smaller
+        int x_proj = int(x_world * 3.0) + 600;
+        int y_proj = int(z_world * 3.0) + 250;
 
         if (x_proj > 0 && x_proj < 1200 && y_proj > 0 && y_proj < 300)
         {
@@ -42,12 +42,12 @@ void accumulatePointCloud(const Mat& pts4D)
     }
 }
 
-// Helper: Draw full accumulated cloud
+// Helper: Draw all accumulated cloud points
 void drawAllCloudPoints(Mat &traj)
 {
     for (const auto& p : all_cloud_points)
     {
-        circle(traj, p, 1, Scalar(255, 255, 200), 1); // light blue dots
+        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Bigger light blue dots
     }
 }
 
@@ -56,7 +56,7 @@ int main()
     string folder = "first_200_right/";
     int num_images = 200;
 
-    Ptr<ORB> orb = ORB::create(2000);
+    Ptr<ORB> orb = ORB::create(3000); // More features
     BFMatcher matcher(NORM_HAMMING);
 
     int width = 1200;
@@ -68,7 +68,7 @@ int main()
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
-    Point2d last_point(600, 250); // Start centered lower
+    Point2d last_point(600, 250);
 
     for (int i = 0; i < num_images-1; i++)
     {
@@ -100,7 +100,7 @@ int main()
         matcher.match(desc1, desc2, matches);
 
         sort(matches.begin(), matches.end());
-        matches.resize(200);
+        matches.resize(500); // MORE matches (more point cloud)
 
         vector<Point2f> pts1, pts2;
         for (auto &m : matches)
@@ -115,7 +115,7 @@ int main()
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
         }
 
-        // Estimate Essential matrix and pose
+        // Essential matrix and pose
         Mat E = findEssentialMat(pts1, pts2, K);
         Mat R, t;
         recoverPose(E, pts1, pts2, K, R, t);
@@ -133,7 +133,7 @@ int main()
         drawTrajectory(traj, current_point, last_point);
         last_point = current_point;
 
-        // Triangulate points for point cloud
+        // Triangulate
         Mat proj1 = K * Mat::eye(3,4,CV_64F);
         Mat proj2 = K * Rt(Range(0,3), Range::all());
         Mat pts4D;
@@ -148,11 +148,11 @@ int main()
 
         traj = traj_frame.clone();
 
-        // Resize top image
+        // Top image
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 
-        // Combine top and bottom
+        // Combine
         Mat full_frame;
         vconcat(img1_resized, traj, full_frame);
 
@@ -161,6 +161,7 @@ int main()
 
     output_video.release();
 
-    cout << "✅ Final correct video saved: output_combined.avi" << endl;
+    cout << "✅ FINAL Corrected Video Saved: output_combined.avi" << endl;
     return 0;
 }
+

@@ -1,137 +1,118 @@
 #include <iostream>
-#include <opencv2/opencv.hpp>
 #include <vector>
 #include <string>
-#include <filesystem>
-
-namespace fs = std::filesystem;
+#include <opencv2/opencv.hpp>
 
 using namespace std;
 using namespace cv;
 
-// === Intrinsic Camera Matrix ===
-Mat K = (Mat_<double>(3, 3) << 707.0493, 0, 604.0814,
-                                0, 707.0493, 180.5066,
-                                0, 0, 1);
+// Camera Intrinsics (given)
+Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
+                               0, 707.0493, 180.5066,
+                               0, 0, 1);
 
-int main() {
-    string folder_path = "first_200_right/";
-    vector<string> image_files;
+// Helper: Draw trajectory
+void drawTrajectory(Mat &canvas, Point2d position, Scalar color)
+{
+    circle(canvas, Point(int(position.x)+300, int(position.y)+100), 1, color, 2);
+}
 
-    // Load image filenames
-    for (const auto& entry : fs::directory_iterator(folder_path)) {
-        image_files.push_back(entry.path().string());
-    }
-    sort(image_files.begin(), image_files.end());
+int main()
+{
+    string folder = "first_200_right/";
+    int num_images = 200;
 
-    // Trajectory plot
-    int traj_size = 600;
-    Mat traj = Mat::zeros(traj_size, traj_size, CV_8UC3);
+    Ptr<ORB> orb = ORB::create(2000);
+    BFMatcher matcher(NORM_HAMMING);
 
-    // Initialize camera pose
-    Mat R_f = Mat::eye(3, 3, CV_64F);
-    Mat t_f = Mat::zeros(3, 1, CV_64F);
+    Mat combined = Mat::zeros(600, 1200, CV_8UC3);
+    VideoWriter combined_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, combined.size());
 
-    // Video writers
-    VideoWriter traj_video("output_trajectory.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, Size(traj_size, traj_size));
-    VideoWriter pointcloud_video("output_pointcloud.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 10, Size(800, 800));
+    Mat pose = Mat::eye(4, 4, CV_64F);
 
-    Ptr<ORB> orb = ORB::create();
+    for (int i = 0; i < num_images-1; i++)
+    {
+        char filename1[100], filename2[100];
+        sprintf(filename1, "%s%06d.png", folder.c_str(), i);
+        sprintf(filename2, "%s%06d.png", folder.c_str(), i+1);
 
-    for (size_t i = 0; i < image_files.size() - 1; i++) {
-        Mat img1 = imread(image_files[i], IMREAD_GRAYSCALE);
-        Mat img2 = imread(image_files[i+1], IMREAD_GRAYSCALE);
+        Mat img1 = imread(filename1, IMREAD_GRAYSCALE);
+        Mat img2 = imread(filename2, IMREAD_GRAYSCALE);
 
-        if (img1.empty() || img2.empty()) {
-            cout << "Error loading images!" << endl;
+        if (img1.empty() || img2.empty())
+        {
+            cout << "Cannot load images " << filename1 << " or " << filename2 << endl;
             continue;
         }
 
-        vector<KeyPoint> keypoints1, keypoints2;
-        Mat descriptors1, descriptors2;
+        // Detect ORB keypoints and descriptors
+        vector<KeyPoint> kp1, kp2;
+        Mat desc1, desc2;
+        orb->detectAndCompute(img1, noArray(), kp1, desc1);
+        orb->detectAndCompute(img2, noArray(), kp2, desc2);
 
-        // Detect ORB features
-        orb->detectAndCompute(img1, noArray(), keypoints1, descriptors1);
-        orb->detectAndCompute(img2, noArray(), keypoints2, descriptors2);
-
-        // Match features
-        BFMatcher matcher(NORM_HAMMING);
+        // Match descriptors
         vector<DMatch> matches;
-        matcher.match(descriptors1, descriptors2, matches);
+        matcher.match(desc1, desc2, matches);
 
-        // Filter good matches
-        double max_dist = 0; double min_dist = 100;
-        for (int k = 0; k < descriptors1.rows; k++) {
-            double dist = matches[k].distance;
-            if (dist < min_dist) min_dist = dist;
-            if (dist > max_dist) max_dist = dist;
-        }
-        vector<DMatch> good_matches;
-        for (int k = 0; k < descriptors1.rows; k++) {
-            if (matches[k].distance <= max(2*min_dist, 30.0)) {
-                good_matches.push_back(matches[k]);
-            }
-        }
+        // Select good matches
+        sort(matches.begin(), matches.end());
+        matches.resize(100); // Take top 100 matches
 
         // Extract matched points
         vector<Point2f> pts1, pts2;
-        for (size_t j = 0; j < good_matches.size(); j++) {
-            pts1.push_back(keypoints1[good_matches[j].queryIdx].pt);
-            pts2.push_back(keypoints2[good_matches[j].trainIdx].pt);
+        for (auto &m : matches)
+        {
+            pts1.push_back(kp1[m.queryIdx].pt);
+            pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Fundamental matrix
+        // Estimate Fundamental matrix
         Mat F = findFundamentalMat(pts1, pts2, FM_RANSAC);
 
-        // Essential matrix
-        Mat E = K.t() * F * K;
+        // Estimate Essential matrix
+        Mat E = findEssentialMat(pts1, pts2, K);
 
-        // Recover Pose
-        Mat R, t, mask;
-        recoverPose(E, pts1, pts2, K, R, t, mask);
+        // Decompose Essential matrix to get R and t
+        Mat R, t;
+        recoverPose(E, pts1, pts2, K, R, t);
 
-        // Update current pose
-        t_f = t_f + (R_f * t);
-        R_f = R * R_f;
+        // Update pose
+        Mat Rt = Mat::eye(4,4,CV_64F);
+        R.copyTo(Rt(Range(0,3), Range(0,3)));
+        t.copyTo(Rt(Range(0,3), Range(3,4)));
 
-        int x = int(t_f.at<double>(0)) + traj_size/2;
-        int y = int(t_f.at<double>(2)) + traj_size/2;
+        pose = pose * Rt.inv();
 
-        circle(traj, Point(x, y), 1, Scalar(0, 0, 255), 2);
+        // Draw trajectory
+        Point2d center(pose.at<double>(0,3)*5, pose.at<double>(2,3)*5);
+        drawTrajectory(combined, center, Scalar(0,255,0));
 
-        // Show and save frame
-        traj_video.write(traj);
-        imshow("Trajectory", traj);
-        waitKey(1);
+        // Triangulation
+        Mat proj1 = K * Mat::eye(3,4,CV_64F);
+        Mat proj2 = K * Rt(Range(0,3), Range::all());
 
-        // Triangulate points
-        Mat P1 = K * Mat::eye(3, 4, CV_64F);
-        Mat Rt;
-        hconcat(R, t, Rt);
-        Mat P2 = K * Rt;
+        Mat pts4D;
+        triangulatePoints(proj1, proj2, pts1, pts2, pts4D);
 
-        Mat pts_4d;
-        triangulatePoints(P1, P2, pts1, pts2, pts_4d);
+        for (int c = 0; c < pts4D.cols; c++)
+        {
+            Mat x = pts4D.col(c);
+            x /= x.at<float>(3);
+            int x_proj = int(x.at<float>(0)*30) + 300;
+            int y_proj = int(x.at<float>(1)*30) + 300;
 
-        // Draw 3D points
-        Mat cloud = Mat::zeros(800, 800, CV_8UC3);
-        for (int k = 0; k < pts_4d.cols; k++) {
-            Point3f pt;
-            pt.x = pts_4d.at<float>(0,k) / pts_4d.at<float>(3,k);
-            pt.y = pts_4d.at<float>(1,k) / pts_4d.at<float>(3,k);
-            pt.z = pts_4d.at<float>(2,k) / pts_4d.at<float>(3,k);
-
-            int u = int(pt.x * 10) + 400;
-            int v = int(pt.y * 10) + 400;
-            if (u >= 0 && u < 800 && v >= 0 && v < 800)
-                circle(cloud, Point(u,v), 1, Scalar(255, 255, 255), 1);
+            if (x_proj > 0 && y_proj > 0 && x_proj < 1200 && y_proj < 600)
+            {
+                circle(combined, Point(x_proj, y_proj), 1, Scalar(255,0,0), 1);
+            }
         }
-        pointcloud_video.write(cloud);
+
+        combined_video.write(combined);
     }
 
-    traj_video.release();
-    pointcloud_video.release();
-    cout << "Done! Videos saved." << endl;
+    combined_video.release();
 
+    cout << "Done! Combined video saved: output_combined.avi" << endl;
     return 0;
 }

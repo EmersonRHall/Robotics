@@ -14,14 +14,14 @@ Mat K = (Mat_<double>(3,3) << 707.0493, 0, 604.0814,
 // Cumulative Point Cloud
 vector<Point2f> all_cloud_points;
 
-// Helper: Draw trajectory line and points
+// Helper: Draw trajectory
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED thicker line
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED thick line
     circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // RED circle at point
 }
 
-// Helper: Store point cloud
+// Helper: Accumulate point cloud
 void accumulatePointCloud(const Mat& pts4D)
 {
     for (int c = 0; c < pts4D.cols; c++)
@@ -42,12 +42,12 @@ void accumulatePointCloud(const Mat& pts4D)
     }
 }
 
-// Helper: Draw all accumulated point cloud
+// Helper: Draw point cloud
 void drawAllCloudPoints(Mat &traj)
 {
     for (const auto& p : all_cloud_points)
     {
-        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue point cloud
+        circle(traj, p, 2, Scalar(255, 255, 200), -1); // light blue points
     }
 }
 
@@ -89,18 +89,18 @@ int main()
         cvtColor(img1_color, img1_gray, COLOR_BGR2GRAY);
         cvtColor(img2_color, img2_gray, COLOR_BGR2GRAY);
 
-        // ORB Detection
+        // ORB detection
         vector<KeyPoint> kp1, kp2;
         Mat desc1, desc2;
         orb->detectAndCompute(img1_gray, noArray(), kp1, desc1);
         orb->detectAndCompute(img2_gray, noArray(), kp2, desc2);
 
-        // Match descriptors
+        // Matching descriptors
         vector<DMatch> matches;
         matcher.match(desc1, desc2, matches);
 
         sort(matches.begin(), matches.end());
-        matches.resize(500); // more point cloud matches
+        matches.resize(500); // More matches = more point cloud
 
         vector<Point2f> pts1, pts2;
         for (auto &m : matches)
@@ -109,13 +109,13 @@ int main()
             pts2.push_back(kp2[m.trainIdx].pt);
         }
 
-        // Draw more green points
+        // Draw green points
         for (const auto& p : pts1)
         {
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
         }
 
-        // Essential matrix and pose
+        // Estimate Essential matrix and recover pose
         Mat E = findEssentialMat(pts1, pts2, K);
         Mat R, t;
         recoverPose(E, pts1, pts2, K, R, t);
@@ -125,13 +125,13 @@ int main()
         t.copyTo(Rt(Range(0,3), Range(3,4)));
         pose = pose * Rt.inv();
 
-        // Compute new current point
+        // Compute current point (X regular, Z flipped)
         Point2d current_point(
             pose.at<double>(0,3) * 3.0 + 600,
-            pose.at<double>(2,3) * 3.0 + 250
+           -pose.at<double>(2,3) * 3.0 + 250
         );
 
-        // Triangulate
+        // Triangulate points
         Mat proj1 = K * Mat::eye(3,4,CV_64F);
         Mat proj2 = K * Rt(Range(0,3), Range::all());
         Mat pts4D;
@@ -139,15 +139,15 @@ int main()
 
         accumulatePointCloud(pts4D);
 
-        // --- Draw bottom panel ---
+        // Draw bottom panel
         Mat traj_frame = Mat::zeros(traj_height, width, CV_8UC3);
-        drawAllCloudPoints(traj_frame);        // First: draw point cloud
-        drawTrajectory(traj_frame, current_point, last_point); // Then: draw red trajectory on top
+        drawAllCloudPoints(traj_frame); // Draw point cloud first
+        drawTrajectory(traj_frame, current_point, last_point); // Then red line on top
 
         traj = traj_frame.clone();
         last_point = current_point;
 
-        // Top image
+        // Resize top image
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 
@@ -160,7 +160,6 @@ int main()
 
     output_video.release();
 
-    cout << "✅ FINAL Video Saved: output_combined.avi" << endl;
+    cout << "✅ FINAL video saved: output_combined.avi" << endl;
     return 0;
 }
-

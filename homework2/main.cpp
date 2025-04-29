@@ -17,8 +17,8 @@ vector<Point2f> all_cloud_points;
 // Helper: Draw trajectory
 void drawTrajectory(Mat &traj, Point2d current_pos, Point2d last_pos)
 {
-    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED thick line
-    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // RED circle at point
+    line(traj, last_pos, current_pos, Scalar(0, 0, 255), 2); // RED line
+    circle(traj, current_pos, 3, Scalar(0, 0, 255), -1);      // RED point
 }
 
 // Helper: Accumulate point cloud
@@ -32,8 +32,8 @@ void accumulatePointCloud(const Mat& pts4D)
         float x_world = x.at<float>(0);
         float z_world = x.at<float>(2);
 
-        int x_proj = int(x_world * 3.0) + 600;
-        int y_proj = int(z_world * 3.0) + 250;
+        int x_proj = int(x_world * 1.5) + 600;
+        int y_proj = int(z_world * 1.5) + 280;
 
         if (x_proj > 0 && x_proj < 1200 && y_proj > 0 && y_proj < 300)
         {
@@ -42,12 +42,12 @@ void accumulatePointCloud(const Mat& pts4D)
     }
 }
 
-// Helper: Draw point cloud
+// Helper: Draw all point cloud
 void drawAllCloudPoints(Mat &traj)
 {
     for (const auto& p : all_cloud_points)
     {
-        circle(traj, p, 2, Scalar(255, 255, 200), -1); // light blue points
+        circle(traj, p, 2, Scalar(255, 255, 200), -1); // Light blue dots
     }
 }
 
@@ -68,7 +68,7 @@ int main()
     VideoWriter output_video("output_combined.avi", VideoWriter::fourcc('M','J','P','G'), 10, Size(width, full_height));
 
     Mat pose = Mat::eye(4, 4, CV_64F);
-    Point2d last_point(600, 250);
+    Point2d last_point(600, 280);
 
     for (int i = 0; i < num_images-1; i++)
     {
@@ -95,12 +95,12 @@ int main()
         orb->detectAndCompute(img1_gray, noArray(), kp1, desc1);
         orb->detectAndCompute(img2_gray, noArray(), kp2, desc2);
 
-        // Matching descriptors
+        // Match descriptors
         vector<DMatch> matches;
         matcher.match(desc1, desc2, matches);
 
         sort(matches.begin(), matches.end());
-        matches.resize(500); // More matches = more point cloud
+        matches.resize(500); // More matches
 
         vector<Point2f> pts1, pts2;
         for (auto &m : matches)
@@ -115,7 +115,7 @@ int main()
             circle(img1_color, p, 2, Scalar(0, 255, 0), -1);
         }
 
-        // Estimate Essential matrix and recover pose
+        // Essential matrix and pose
         Mat E = findEssentialMat(pts1, pts2, K);
         Mat R, t;
         recoverPose(E, pts1, pts2, K, R, t);
@@ -125,13 +125,13 @@ int main()
         t.copyTo(Rt(Range(0,3), Range(3,4)));
         pose = pose * Rt.inv();
 
-        // Compute current point (X regular, Z flipped)
+        // Compute current point (X normal, Z flipped)
         Point2d current_point(
-            pose.at<double>(0,3) * 3.0 + 600,
-           -pose.at<double>(2,3) * 3.0 + 250
+            pose.at<double>(0,3) * 1.5 + 600,
+           -pose.at<double>(2,3) * 1.5 + 280
         );
 
-        // Triangulate points
+        // Triangulate
         Mat proj1 = K * Mat::eye(3,4,CV_64F);
         Mat proj2 = K * Rt(Range(0,3), Range::all());
         Mat pts4D;
@@ -147,7 +147,7 @@ int main()
         traj = traj_frame.clone();
         last_point = current_point;
 
-        // Resize top image
+        // Top image
         Mat img1_resized;
         resize(img1_color, img1_resized, Size(width, height));
 

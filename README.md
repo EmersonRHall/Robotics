@@ -1,2 +1,2 @@
 # Robotics
-For my robotics class
+These were homework assignments for my introduction to Robotics class.
